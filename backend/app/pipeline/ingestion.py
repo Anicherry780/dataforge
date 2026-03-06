@@ -1,7 +1,7 @@
 """
 Data Ingestion Module — Real API Connectors (no API keys required)
 
-  CryptoMarketIngestion  → CoinCap API    — top-N coins, live market data
+  CryptoMarketIngestion  → CoinLore API   — top-N coins, live market data
   WeatherIngestion       → Open-Meteo API  — current conditions, 10 global cities
   GitHubEventsIngestion  → GitHub API      — public developer event stream
 """
@@ -36,13 +36,12 @@ WMO_CONDITIONS = {
     95: "Thunderstorm", 96: "Thunderstorm w/ Hail", 99: "Thunderstorm w/ Heavy Hail",
 }
 
-
 class CryptoMarketIngestion:
-    """Fetches live crypto market data from CoinCap (free, no auth, cloud-friendly)."""
-    BASE_URL = "https://api.coincap.io/v2/assets"
+    """Fetches live crypto market data from CoinLore (free, no auth, cloud-friendly)."""
+    BASE_URL = "https://api.coinlore.net/api/tickers/"
 
     def __init__(self, top_n: int = 50):
-        self.top_n = min(top_n, 200)
+        self.top_n = min(top_n, 100)
 
     async def fetch(self, on_progress: ProgressCb = None) -> List[Dict[str, Any]]:
         records: List[Dict[str, Any]] = []
@@ -52,28 +51,29 @@ class CryptoMarketIngestion:
             try:
                 resp = await client.get(
                     self.BASE_URL,
-                    params={"limit": self.top_n},
+                    params={"start": 0, "limit": self.top_n},
                 )
                 resp.raise_for_status()
                 data = resp.json().get("data", [])
             except Exception:
-                # Return empty on failure
                 return records
 
             for i, coin in enumerate(data):
-                price = float(coin.get("priceUsd") or 0)
-                mc = float(coin.get("marketCapUsd") or 0)
-                vol = float(coin.get("volumeUsd24Hr") or 0)
-                chg24 = float(coin.get("changePercent24Hr") or 0)
-                supply = float(coin.get("supply") or 0)
-                vwap = float(coin.get("vwap24Hr") or 0)
+                price = float(coin.get("price_usd") or 0)
+                mc = float(coin.get("market_cap_usd") or 0)
+                vol = float(coin.get("volume24") or 0)
+                chg1h = float(coin.get("percent_change_1h") or 0)
+                chg24h = float(coin.get("percent_change_24h") or 0)
+                chg7d = float(coin.get("percent_change_7d") or 0)
+                supply = float(coin.get("csupply") or 0)
 
-                # Approximate high/low from vwap and change
-                high_24h = max(price, vwap * 1.02) if vwap else price
-                low_24h = min(price, vwap * 0.98) if vwap else price
+                # Approximate high/low from price and 24h change
+                price_start_24h = price / (1 + chg24h / 100) if chg24h != -100 else price
+                high_24h = max(price, price_start_24h) * 1.01
+                low_24h = min(price, price_start_24h) * 0.99
 
                 records.append({
-                    "coin_id":              coin.get("id"),
+                    "coin_id":              coin.get("nameid"),
                     "symbol":               (coin.get("symbol") or "").upper(),
                     "name":                 coin.get("name"),
                     "current_price":        round(price, 6),
@@ -82,15 +82,15 @@ class CryptoMarketIngestion:
                     "total_volume":         round(vol, 2),
                     "high_24h":             round(high_24h, 6),
                     "low_24h":              round(low_24h, 6),
-                    "price_change_24h":     round(price * chg24 / 100, 6),
-                    "price_change_pct_1h":  None,  # not available in CoinCap
-                    "price_change_pct_24h": round(chg24, 2),
-                    "price_change_pct_7d":  None,  # not available in CoinCap
+                    "price_change_24h":     round(price * chg24h / 100, 6),
+                    "price_change_pct_1h":  round(chg1h, 2),
+                    "price_change_pct_24h": round(chg24h, 2),
+                    "price_change_pct_7d":  round(chg7d, 2),
                     "circulating_supply":   round(supply, 2),
-                    "ath":                  None,   # not available in CoinCap
+                    "ath":                  None,
                     "ath_change_pct":       None,
                     "last_updated":         fetched_at,
-                    "source":               "coincap",
+                    "source":               "coinlore",
                     "fetched_at":           fetched_at,
                 })
 
