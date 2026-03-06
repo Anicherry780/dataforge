@@ -1,6 +1,8 @@
 # ◈ DataForge — Real-Time ETL Pipeline & Analytics Platform
 
-> A production-grade data engineering platform for ingesting, transforming, validating, and loading large-scale datasets — with a live monitoring dashboard and WebSocket-powered real-time updates.
+> A production-grade data engineering platform for ingesting, transforming, validating, and loading real-time data from live APIs — with a monitoring dashboard and WebSocket-powered updates.
+
+🔗 **Live Demo**: [etl.anirudhdev.com](http://etl.anirudhdev.com)
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=flat&logo=fastapi&logoColor=white)
@@ -12,14 +14,14 @@
 
 ## Overview
 
-DataForge is a full-stack data engineering platform that demonstrates end-to-end ETL pipeline design, real-time data quality monitoring, and scalable API architecture. Built to simulate a production environment used by e-commerce companies to process millions of daily transactions.
+DataForge is a full-stack data engineering platform that demonstrates end-to-end ETL pipeline design, real-time data quality monitoring, and scalable API architecture. It connects to **live public APIs** to ingest, transform, and analyze real-world data.
 
 **Key capabilities:**
-- Multi-source data ingestion (CSV files, REST APIs, streaming/Kafka simulation)
+- Multi-source data ingestion from live APIs (CoinLore, Open-Meteo, GitHub Events)
 - Statistical anomaly detection using Z-score analysis
 - 5-dimension data quality framework (Completeness, Validity, Uniqueness, Timeliness, Consistency)
-- Real-time pipeline progress via WebSockets
-- Interactive analytics dashboard with live charts
+- Real-time pipeline progress via WebSockets + polling fallback
+- Interactive analytics dashboard with Chart.js visualizations
 
 ---
 
@@ -43,7 +45,7 @@ DataForge is a full-stack data engineering platform that demonstrates end-to-end
 │  ┌──────────────┐    │  ┌──────────────────────────────────────┐ │ │
 │  │  FastAPI     │    │  │          Data Warehouse               │ │ │
 │  │  REST API    │    │  │  SQLite (dev) / PostgreSQL (prod)     │ │ │
-│  │  WebSocket   │◄───┤  │  processed_transactions              │ │ │
+│  │  WebSocket   │◄───┤  │  crypto · weather · github records   │ │ │
 │  │  /api/...    │    │  │  pipeline_runs · pipeline_metrics    │ │ │
 │  └──────────────┘    │  └──────────────────────────────────────┘ │ │
 │                      └────────────────────────────────────────────┘ │
@@ -70,13 +72,13 @@ DataForge is a full-stack data engineering platform that demonstrates end-to-end
 
 ### ETL Pipeline Engine
 
-Three built-in pipelines, each with configurable sources:
+Three built-in pipelines with live API data sources:
 
-| Pipeline | Source | Schedule | Records |
+| Pipeline | Source API | Data | Records |
 |---|---|---|---|
-| E-Commerce Transactions | CSV file | Daily @ 02:00 | ~5,000/run |
-| Orders API Sync | Paginated REST API | Every 30 min | ~2,000/run |
-| Real-Time Event Stream | Kafka (simulated) | Continuous | ~3,000/run |
+| Crypto Market Data | [CoinLore](https://www.coinlore.com/cryptocurrency-data-api) | Top 50–100 coins: prices, volumes, market cap | ~100/run |
+| Global Weather Observations | [Open-Meteo](https://open-meteo.com/) | 10 global cities: temperature, humidity, wind | ~10/run |
+| GitHub Public Events | [GitHub Events API](https://docs.github.com/en/rest/activity/events) | Pushes, PRs, issues, forks | ~90/run |
 
 ### Data Quality Framework
 
@@ -116,12 +118,25 @@ Statistical Z-score analysis flags orders where `|z| > 3.5` deviations from the 
 ### Option 1 — Docker Compose (recommended)
 
 ```bash
-git clone https://github.com/anirudhdev/dataforge.git
+git clone https://github.com/Anicherry780/dataforge.git
 cd dataforge
 docker compose up --build
 ```
 
 Open **http://localhost** for the dashboard, **http://localhost:8000/api/docs** for Swagger.
+
+### Option 3 — Cloud Deployment (Cloudflare Pages + Render)
+
+The live demo uses this architecture:
+- **Frontend** → [Cloudflare Pages](https://pages.cloudflare.com/) (free, static hosting)
+- **Backend** → [Render](https://render.com/) (free tier, Docker deploy)
+
+```bash
+# Set the API URL in frontend/index.html:
+window.__DATAFORGE_API__ = 'https://your-app.onrender.com';
+
+# Optional: set GITHUB_TOKEN env var on Render for higher GitHub API rate limits
+```
 
 ### Option 2 — Local Development
 
@@ -151,13 +166,13 @@ dataforge/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py                    # FastAPI app, WebSocket endpoint
-│   │   ├── models.py                  # Pydantic schemas
+│   │   ├── models.py                  # Pydantic schemas (if needed)
 │   │   ├── database.py                # Async SQLite layer
 │   │   ├── core/
 │   │   │   └── connection_manager.py  # WebSocket connection pool
 │   │   ├── pipeline/
 │   │   │   ├── engine.py              # Pipeline orchestrator
-│   │   │   ├── ingestion.py           # CSV / API / Stream connectors
+│   │   │   ├── ingestion.py           # CoinLore / Open-Meteo / GitHub connectors
 │   │   │   ├── transformation.py      # Dedupe, enrich, anomaly detection
 │   │   │   ├── quality.py             # 5-dimension DQ framework
 │   │   │   └── loader.py              # Batch warehouse loader
@@ -202,7 +217,7 @@ Pipeline runs can take 10–30 seconds. Async Python (asyncio + aiosqlite + Fast
 
 Production extensions to discuss in interviews:
 
-- **Replace ingestion**: Swap `CsvIngestion` for a real `KafkaConsumer` or `S3Reader`
+- **Add data sources**: Add new ingestion classes (e.g., `KafkaConsumer`, `S3Reader`, custom REST APIs)
 - **Scale the warehouse**: Point `database.py` at BigQuery, Snowflake, or Redshift
 - **Add orchestration**: Wrap `execute_pipeline()` with Airflow/Prefect DAGs
 - **Observability**: Add OpenTelemetry tracing to each pipeline step
@@ -213,4 +228,4 @@ Production extensions to discuss in interviews:
 
 ## License
 
-MIT — built by [Anirudh](https://anirudhdev.com)
+MIT — built by [Anirudh](https://anirudhdev.com) · Live at [etl.anirudhdev.com](http://etl.anirudhdev.com)
