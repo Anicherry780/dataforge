@@ -1,13 +1,14 @@
+import os
+import pathlib
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-import os
-import pathlib
 
-from app.database import init_db
 from app.api.routes import router
 from app.core.connection_manager import manager
+from app.database import init_db
 
 
 @asynccontextmanager

@@ -6,7 +6,7 @@ Supports batch loading with checkpointing and idempotent writes.
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Callable, Awaitable, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from app.database import save_records
 

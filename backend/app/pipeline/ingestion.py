@@ -6,9 +6,10 @@ Data Ingestion Module — Real API Connectors (no API keys required)
   GitHubEventsIngestion  → GitHub API      — public developer event stream
 """
 import asyncio
-import httpx
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional, Callable, Awaitable
+from typing import Any, Awaitable, Callable, Dict, List, Optional
+
+import httpx
 
 ProgressCb = Optional[Callable[[int, int, str], Awaitable[None]]]
 

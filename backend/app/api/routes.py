@@ -1,12 +1,16 @@
-from fastapi import APIRouter, HTTPException, Query
-from typing import Optional
 from datetime import datetime, timezone
+from typing import Optional
 
-from app.models import TriggerRunRequest
+from fastapi import APIRouter, HTTPException, Query
+
 from app.database import (
-    get_run, get_all_runs, get_runs_by_pipeline,
-    get_data_preview, get_metrics_summary,
+    get_all_runs,
+    get_data_preview,
+    get_metrics_summary,
+    get_run,
+    get_runs_by_pipeline,
 )
+from app.models import TriggerRunRequest
 from app.pipeline.engine import PIPELINE_REGISTRY, execute_pipeline
 
 router = APIRouter()

@@ -6,15 +6,14 @@ Emits real-time progress events via the WebSocket connection manager.
 import asyncio
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 from app.core.connection_manager import manager
 from app.database import save_run
 from app.pipeline.ingestion import get_ingestion_source
+from app.pipeline.loader import load_to_warehouse
 from app.pipeline.quality import run_all_checks
 from app.pipeline.transformation import transform
-from app.pipeline.loader import load_to_warehouse
-
 
 PIPELINE_REGISTRY: Dict[str, Dict[str, Any]] = {
     "crypto-market": {

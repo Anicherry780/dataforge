@@ -5,8 +5,7 @@ Each pipeline source gets domain-specific transforms after generic dedup/cast.
 import asyncio
 from datetime import datetime, timezone
 from statistics import mean, stdev
-from typing import List, Dict, Any, Tuple
-
+from typing import Any, Dict, List, Tuple
 
 # ── Generic ────────────────────────────────────────────────────────────────────
 

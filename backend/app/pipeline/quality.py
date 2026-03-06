@@ -3,8 +3,8 @@ Data Quality Framework — Pipeline-aware checks
 Dispatches to the right check set based on source type.
 Each pipeline runs 5 DQ dimensions: Completeness, Validity, Uniqueness, Timeliness, Consistency.
 """
-from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Any, Tuple
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Tuple
 
 KNOWN_EVENT_TYPES = {
     "PushEvent", "PullRequestEvent", "IssuesEvent", "IssueCommentEvent",
