@@ -255,3 +255,33 @@ def run_all_checks(records: List[Dict], source_type: str = "crypto") -> Tuple[Li
     weights = [0.25, 0.25, 0.20, 0.15, 0.15]
     score = sum(c["pass_rate"] * w for c, w in zip(checks, weights))
     return checks, round(score, 1)
+
+
+# ── Public aliases used by tests ───────────────────────────────────────────────
+
+def check_completeness(records: List[Dict], required: List[str] | None = None) -> Dict[str, Any]:
+    return _completeness(records, required or (list(records[0].keys()) if records else []))
+
+
+def check_validity(records: List[Dict], source_type: str = "crypto") -> Dict[str, Any]:
+    if source_type == "weather":
+        return _weather_validity(records)
+    if source_type == "github":
+        return _github_validity(records)
+    return _crypto_validity(records)
+
+
+def check_uniqueness(records: List[Dict], key_field: str = "id") -> Dict[str, Any]:
+    return _uniqueness(records, key_field)
+
+
+def check_timeliness(records: List[Dict], ts_field: str = "created_at", max_age_hours: float = 2) -> Dict[str, Any]:
+    return _timeliness(records, ts_field, max_age_hours)
+
+
+def check_consistency(records: List[Dict], source_type: str = "crypto") -> Dict[str, Any]:
+    if source_type == "weather":
+        return _weather_consistency(records)
+    if source_type == "github":
+        return _github_consistency(records)
+    return _crypto_consistency(records)
