@@ -40,16 +40,31 @@ class CryptoMarketIngestion:
     """Fetches live crypto market data from CoinGecko (free, no auth)."""
     BASE_URL = "https://api.coingecko.com/api/v3/coins/markets"
 
-    def __init__(self, top_n: int = 100):
+    def __init__(self, top_n: int = 50):
         self.top_n = min(top_n, 250)
+
+    async def _request_with_retry(self, client, params, max_retries: int = 3):
+        """Make a request with exponential backoff on 429 rate-limit errors."""
+        for attempt in range(max_retries):
+            resp = await client.get(self.BASE_URL, params=params)
+            if resp.status_code == 429:
+                wait = 10 * (2 ** attempt)  # 10s, 20s, 40s
+                await asyncio.sleep(wait)
+                continue
+            resp.raise_for_status()
+            return resp.json()
+        # Final attempt — let it raise if it still fails
+        resp = await client.get(self.BASE_URL, params=params)
+        resp.raise_for_status()
+        return resp.json()
 
     async def fetch(self, on_progress: ProgressCb = None) -> List[Dict[str, Any]]:
         records: List[Dict[str, Any]] = []
-        per_page = 100
+        per_page = 50
         pages = (self.top_n + per_page - 1) // per_page
         fetched_at = datetime.now(timezone.utc).isoformat()
 
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=60) as client:
             for page in range(1, pages + 1):
                 params = {
                     "vs_currency": "usd",
@@ -59,10 +74,13 @@ class CryptoMarketIngestion:
                     "sparkline": "false",
                     "price_change_percentage": "1h,24h,7d",
                 }
-                resp = await client.get(self.BASE_URL, params=params)
-                resp.raise_for_status()
+                try:
+                    coins = await self._request_with_retry(client, params)
+                except Exception:
+                    # Return whatever we have so far instead of crashing
+                    break
 
-                for coin in resp.json():
+                for coin in coins:
                     records.append({
                         "coin_id":              coin.get("id"),
                         "symbol":               (coin.get("symbol") or "").upper(),
@@ -88,7 +106,7 @@ class CryptoMarketIngestion:
                 if on_progress:
                     await on_progress(len(records), self.top_n, f"ingestion:page_{page}")
                 if page < pages:
-                    await asyncio.sleep(1.5)  # free-tier rate limit
+                    await asyncio.sleep(3)  # generous delay for free-tier
 
         return records
 
@@ -151,52 +169,68 @@ class GitHubEventsIngestion:
     BASE_URL = "https://api.github.com/events"
     HEADERS  = {"Accept": "application/vnd.github.v3+json", "User-Agent": "DataForge-ETL/1.0"}
 
-    def __init__(self, max_pages: int = 5):
+    def __init__(self, max_pages: int = 3):
         self.max_pages = max_pages
 
     async def fetch(self, on_progress: ProgressCb = None) -> List[Dict[str, Any]]:
         records: List[Dict[str, Any]] = []
         fetched_at = datetime.now(timezone.utc).isoformat()
 
-        async with httpx.AsyncClient(timeout=20) as client:
+        async with httpx.AsyncClient(timeout=30) as client:
             for page in range(1, self.max_pages + 1):
-                try:
-                    resp = await client.get(
-                        self.BASE_URL, headers=self.HEADERS,
-                        params={"per_page": 30, "page": page},
-                    )
-                    resp.raise_for_status()
-                    events = resp.json()
-                    if not events:
+                # Retry with backoff on rate limit
+                resp = None
+                for attempt in range(3):
+                    try:
+                        resp = await client.get(
+                            self.BASE_URL, headers=self.HEADERS,
+                            params={"per_page": 30, "page": page},
+                        )
+                        if resp.status_code in (429, 403):
+                            wait = 5 * (2 ** attempt)
+                            await asyncio.sleep(wait)
+                            continue
+                        resp.raise_for_status()
                         break
+                    except Exception:
+                        if attempt < 2:
+                            await asyncio.sleep(5)
+                        else:
+                            resp = None
+                            break
 
-                    for ev in events:
-                        payload = ev.get("payload", {}) or {}
-                        pr = payload.get("pull_request") or {}
-                        records.append({
-                            "event_id":     ev.get("id"),
-                            "event_type":   ev.get("type"),
-                            "actor":        (ev.get("actor") or {}).get("login"),
-                            "repo_name":    (ev.get("repo") or {}).get("name"),
-                            "repo_id":      (ev.get("repo") or {}).get("id"),
-                            "is_public":    ev.get("public", True),
-                            "action":       payload.get("action"),
-                            "ref_type":     payload.get("ref_type"),
-                            "push_size":    payload.get("size"),
-                            "pr_number":    pr.get("number"),
-                            "pr_merged":    pr.get("merged"),
-                            "pr_additions": pr.get("additions"),
-                            "pr_deletions": pr.get("deletions"),
-                            "created_at":   ev.get("created_at"),
-                            "source":       "github",
-                            "fetched_at":   fetched_at,
-                        })
-                except Exception:
+                if resp is None or resp.status_code != 200:
                     break
+
+                events = resp.json()
+                if not events:
+                    break
+
+                for ev in events:
+                    payload = ev.get("payload", {}) or {}
+                    pr = payload.get("pull_request") or {}
+                    records.append({
+                        "event_id":     ev.get("id"),
+                        "event_type":   ev.get("type"),
+                        "actor":        (ev.get("actor") or {}).get("login"),
+                        "repo_name":    (ev.get("repo") or {}).get("name"),
+                        "repo_id":      (ev.get("repo") or {}).get("id"),
+                        "is_public":    ev.get("public", True),
+                        "action":       payload.get("action"),
+                        "ref_type":     payload.get("ref_type"),
+                        "push_size":    payload.get("size"),
+                        "pr_number":    pr.get("number"),
+                        "pr_merged":    pr.get("merged"),
+                        "pr_additions": pr.get("additions"),
+                        "pr_deletions": pr.get("deletions"),
+                        "created_at":   ev.get("created_at"),
+                        "source":       "github",
+                        "fetched_at":   fetched_at,
+                    })
 
                 if on_progress:
                     await on_progress(len(records), self.max_pages * 30, f"ingestion:page_{page}")
-                await asyncio.sleep(0.4)
+                await asyncio.sleep(1.5)  # generous delay for free-tier
 
         return records
 
