@@ -201,6 +201,71 @@ class GitHubEventsIngestion:
         return records
 
 
+_ORDER_COUNTRIES = ["US", "GB", "CA", "AU", "DE", "FR", "JP", "IN", "BR", "MX"]
+_ORDER_STATUSES  = ["completed", "pending", "cancelled", "refunded", "processing"]
+_ORDER_CATEGORIES = ["Electronics", "Clothing", "Books", "Home", "Sports", "Food"]
+
+
+class CsvIngestion:
+    """Simulates reading order records from a CSV file (synthetic data for testing)."""
+
+    def __init__(self, num_records: int = 100):
+        self.num_records = num_records
+
+    async def fetch(self, on_progress: ProgressCb = None) -> List[Dict[str, Any]]:
+        import random
+        now = datetime.now(timezone.utc).isoformat()
+        records = []
+        for i in range(self.num_records):
+            records.append({
+                "order_id":   f"ORD-{i:06d}",
+                "user_id":    f"USR-{random.randint(1, 1000):04d}",
+                "product_id": f"PROD-{random.randint(1, 500):04d}",
+                "category":   random.choice(_ORDER_CATEGORIES),
+                "amount":     round(random.uniform(5.0, 500.0), 2),
+                "quantity":   random.randint(1, 10),
+                "country":    random.choice(_ORDER_COUNTRIES),
+                "status":     random.choice(_ORDER_STATUSES),
+                "created_at": now,
+                "source":     "csv",
+            })
+        return records
+
+
+class ApiIngestion:
+    """Simulates fetching order records from a paginated API (synthetic data for testing)."""
+
+    def __init__(self, num_records: int = 200, page_size: int = 50):
+        self.num_records = num_records
+        self.page_size = page_size
+
+    async def fetch(self, on_progress: ProgressCb = None) -> List[Dict[str, Any]]:
+        import random
+        now = datetime.now(timezone.utc).isoformat()
+        records: List[Dict[str, Any]] = []
+        pages = (self.num_records + self.page_size - 1) // self.page_size
+        for page in range(pages):
+            batch_size = min(self.page_size, self.num_records - len(records))
+            for j in range(batch_size):
+                i = page * self.page_size + j
+                records.append({
+                    "order_id":   f"ORD-API-{i:06d}",
+                    "user_id":    f"USR-{random.randint(1, 1000):04d}",
+                    "product_id": f"PROD-{random.randint(1, 500):04d}",
+                    "category":   random.choice(_ORDER_CATEGORIES),
+                    "amount":     round(random.uniform(5.0, 500.0), 2),
+                    "quantity":   random.randint(1, 10),
+                    "country":    random.choice(_ORDER_COUNTRIES),
+                    "status":     random.choice(_ORDER_STATUSES),
+                    "created_at": now,
+                    "source":     "api",
+                })
+            if on_progress:
+                await on_progress(len(records), self.num_records, f"ingestion:page_{page + 1}")
+            await asyncio.sleep(0)
+        return records
+
+
 def get_ingestion_source(source_type: str, source_config: Optional[Dict] = None):
     """Factory — returns the right connector for a pipeline's source_type."""
     cfg = source_config or {}

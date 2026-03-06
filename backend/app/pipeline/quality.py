@@ -6,6 +6,28 @@ Each pipeline runs 5 DQ dimensions: Completeness, Validity, Uniqueness, Timeline
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Tuple
 
+VALID_STATUSES = {"pending", "completed", "cancelled", "refunded", "processing", "shipped", "failed"}
+
+VALID_COUNTRIES = {
+    "AD", "AE", "AF", "AG", "AL", "AM", "AO", "AR", "AT", "AU", "AZ",
+    "BA", "BB", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BN", "BO", "BR",
+    "BS", "BT", "BW", "BY", "BZ", "CA", "CD", "CF", "CG", "CH", "CI", "CL",
+    "CM", "CN", "CO", "CR", "CU", "CV", "CY", "CZ", "DE", "DJ", "DK", "DM",
+    "DO", "DZ", "EC", "EE", "EG", "ER", "ES", "ET", "FI", "FJ", "FM", "FR",
+    "GA", "GB", "GD", "GE", "GH", "GM", "GN", "GQ", "GR", "GT", "GW", "GY",
+    "HN", "HR", "HT", "HU", "ID", "IE", "IL", "IN", "IQ", "IR", "IS", "IT",
+    "JM", "JO", "JP", "KE", "KG", "KH", "KI", "KM", "KN", "KP", "KR", "KW",
+    "KZ", "LA", "LB", "LC", "LI", "LK", "LR", "LS", "LT", "LU", "LV", "LY",
+    "MA", "MC", "MD", "ME", "MG", "MH", "MK", "ML", "MM", "MN", "MR", "MT",
+    "MU", "MV", "MW", "MX", "MY", "MZ", "NA", "NE", "NG", "NI", "NL", "NO",
+    "NP", "NR", "NZ", "OM", "PA", "PE", "PG", "PH", "PK", "PL", "PT", "PW",
+    "PY", "QA", "RO", "RS", "RU", "RW", "SA", "SB", "SC", "SD", "SE", "SG",
+    "SI", "SK", "SL", "SM", "SN", "SO", "SR", "SS", "ST", "SV", "SY", "SZ",
+    "TD", "TG", "TH", "TJ", "TL", "TM", "TN", "TO", "TR", "TT", "TV", "TZ",
+    "UA", "UG", "US", "UY", "UZ", "VA", "VC", "VE", "VN", "VU", "WS", "YE",
+    "ZA", "ZM", "ZW",
+}
+
 KNOWN_EVENT_TYPES = {
     "PushEvent", "PullRequestEvent", "IssuesEvent", "IssueCommentEvent",
     "WatchEvent", "ForkEvent", "CreateEvent", "DeleteEvent",
@@ -212,14 +234,66 @@ def _github_consistency(records: List[Dict]) -> Dict[str, Any]:
             "pass_rate": pass_rate, "details": details}
 
 
+# ── Order-specific checks ──────────────────────────────────────────────────────
+
+def _order_validity(records: List[Dict]) -> Dict[str, Any]:
+    total = len(records)
+    failed = 0
+    reasons: Dict[str, int] = {}
+    for r in records:
+        bad = False
+        amount = r.get("amount")
+        if amount is not None and (not isinstance(amount, (int, float)) or amount < 0):
+            reasons["invalid_amount"] = reasons.get("invalid_amount", 0) + 1
+            bad = True
+        country = r.get("country")
+        if country is not None and country not in VALID_COUNTRIES:
+            reasons["invalid_country"] = reasons.get("invalid_country", 0) + 1
+            bad = True
+        status = r.get("status")
+        if status is not None and status not in VALID_STATUSES:
+            reasons["invalid_status"] = reasons.get("invalid_status", 0) + 1
+            bad = True
+        if bad:
+            failed += 1
+    pass_rate = round((1 - failed / total) * 100, 2) if total else 0
+    details = ", ".join(f"{k}: {v}" for k, v in reasons.items()) or "All values valid"
+    return {"name": "Validity", "status": _status(pass_rate, 97, 90),
+            "records_checked": total, "records_failed": failed,
+            "pass_rate": pass_rate, "details": details}
+
+
+def _order_consistency(records: List[Dict]) -> Dict[str, Any]:
+    total = len(records)
+    failed = 0
+    for r in records:
+        amount = r.get("amount") or 0
+        status = r.get("status") or ""
+        if status == "completed" and amount <= 0:
+            failed += 1
+    pass_rate = round((1 - failed / total) * 100, 2) if total else 0
+    details = f"{failed} completed orders with zero/negative amount" if failed else "Order amounts consistent"
+    return {"name": "Consistency", "status": _status(pass_rate, 99, 95),
+            "records_checked": total, "records_failed": failed,
+            "pass_rate": pass_rate, "details": details}
+
+
 # ── Dispatcher ─────────────────────────────────────────────────────────────────
 
-def run_all_checks(records: List[Dict], source_type: str = "crypto") -> Tuple[List[Dict], float]:
+def run_all_checks(records: List[Dict], source_type: str = "orders") -> Tuple[List[Dict], float]:
     """Run all 5 DQ checks for the given source type. Returns (checks, weighted_score)."""
     if not records:
         return [], 0.0
 
-    if source_type == "crypto":
+    if source_type == "orders":
+        checks = [
+            _completeness(records, ["order_id", "user_id", "amount", "status"]),
+            _order_validity(records),
+            _uniqueness(records, "order_id"),
+            _timeliness(records, "created_at", max_age_hours=48),
+            _order_consistency(records),
+        ]
+    elif source_type == "crypto":
         checks = [
             _completeness(records, ["coin_id", "current_price", "market_cap", "symbol"]),
             _crypto_validity(records),
@@ -263,15 +337,17 @@ def check_completeness(records: List[Dict], required: List[str] | None = None) -
     return _completeness(records, required or (list(records[0].keys()) if records else []))
 
 
-def check_validity(records: List[Dict], source_type: str = "crypto") -> Dict[str, Any]:
+def check_validity(records: List[Dict], source_type: str = "orders") -> Dict[str, Any]:
     if source_type == "weather":
         return _weather_validity(records)
     if source_type == "github":
         return _github_validity(records)
-    return _crypto_validity(records)
+    if source_type == "crypto":
+        return _crypto_validity(records)
+    return _order_validity(records)
 
 
-def check_uniqueness(records: List[Dict], key_field: str = "id") -> Dict[str, Any]:
+def check_uniqueness(records: List[Dict], key_field: str = "order_id") -> Dict[str, Any]:
     return _uniqueness(records, key_field)
 
 
@@ -279,9 +355,11 @@ def check_timeliness(records: List[Dict], ts_field: str = "created_at", max_age_
     return _timeliness(records, ts_field, max_age_hours)
 
 
-def check_consistency(records: List[Dict], source_type: str = "crypto") -> Dict[str, Any]:
+def check_consistency(records: List[Dict], source_type: str = "orders") -> Dict[str, Any]:
     if source_type == "weather":
         return _weather_consistency(records)
     if source_type == "github":
         return _github_consistency(records)
-    return _crypto_consistency(records)
+    if source_type == "crypto":
+        return _crypto_consistency(records)
+    return _order_consistency(records)
