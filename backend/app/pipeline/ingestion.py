@@ -1,11 +1,12 @@
 """
 Data Ingestion Module — Real API Connectors (no API keys required)
 
-  CryptoMarketIngestion  → CoinGecko API   — top-N coins, live market data
+  CryptoMarketIngestion  → CoinCap API    — top-N coins, live market data
   WeatherIngestion       → Open-Meteo API  — current conditions, 10 global cities
   GitHubEventsIngestion  → GitHub API      — public developer event stream
 """
 import asyncio
+import os
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
@@ -37,77 +38,67 @@ WMO_CONDITIONS = {
 
 
 class CryptoMarketIngestion:
-    """Fetches live crypto market data from CoinGecko (free, no auth)."""
-    BASE_URL = "https://api.coingecko.com/api/v3/coins/markets"
+    """Fetches live crypto market data from CoinCap (free, no auth, cloud-friendly)."""
+    BASE_URL = "https://api.coincap.io/v2/assets"
 
     def __init__(self, top_n: int = 50):
-        self.top_n = min(top_n, 250)
-
-    async def _request_with_retry(self, client, params, max_retries: int = 3):
-        """Make a request with exponential backoff on 429 rate-limit errors."""
-        for attempt in range(max_retries):
-            resp = await client.get(self.BASE_URL, params=params)
-            if resp.status_code == 429:
-                wait = 10 * (2 ** attempt)  # 10s, 20s, 40s
-                await asyncio.sleep(wait)
-                continue
-            resp.raise_for_status()
-            return resp.json()
-        # Final attempt — let it raise if it still fails
-        resp = await client.get(self.BASE_URL, params=params)
-        resp.raise_for_status()
-        return resp.json()
+        self.top_n = min(top_n, 200)
 
     async def fetch(self, on_progress: ProgressCb = None) -> List[Dict[str, Any]]:
         records: List[Dict[str, Any]] = []
-        per_page = 50
-        pages = (self.top_n + per_page - 1) // per_page
         fetched_at = datetime.now(timezone.utc).isoformat()
 
-        async with httpx.AsyncClient(timeout=60) as client:
-            for page in range(1, pages + 1):
-                params = {
-                    "vs_currency": "usd",
-                    "order": "market_cap_desc",
-                    "per_page": min(per_page, self.top_n - len(records)),
-                    "page": page,
-                    "sparkline": "false",
-                    "price_change_percentage": "1h,24h,7d",
-                }
-                try:
-                    coins = await self._request_with_retry(client, params)
-                except Exception:
-                    # Return whatever we have so far instead of crashing
-                    break
+        async with httpx.AsyncClient(timeout=30) as client:
+            try:
+                resp = await client.get(
+                    self.BASE_URL,
+                    params={"limit": self.top_n},
+                )
+                resp.raise_for_status()
+                data = resp.json().get("data", [])
+            except Exception:
+                # Return empty on failure
+                return records
 
-                for coin in coins:
-                    records.append({
-                        "coin_id":              coin.get("id"),
-                        "symbol":               (coin.get("symbol") or "").upper(),
-                        "name":                 coin.get("name"),
-                        "current_price":        coin.get("current_price"),
-                        "market_cap":           coin.get("market_cap"),
-                        "market_cap_rank":      coin.get("market_cap_rank"),
-                        "total_volume":         coin.get("total_volume"),
-                        "high_24h":             coin.get("high_24h"),
-                        "low_24h":              coin.get("low_24h"),
-                        "price_change_24h":     coin.get("price_change_24h"),
-                        "price_change_pct_1h":  coin.get("price_change_percentage_1h_in_currency"),
-                        "price_change_pct_24h": coin.get("price_change_percentage_24h"),
-                        "price_change_pct_7d":  coin.get("price_change_percentage_7d_in_currency"),
-                        "circulating_supply":   coin.get("circulating_supply"),
-                        "ath":                  coin.get("ath"),
-                        "ath_change_pct":       coin.get("ath_change_percentage"),
-                        "last_updated":         coin.get("last_updated"),
-                        "source":               "coingecko",
-                        "fetched_at":           fetched_at,
-                    })
+            for i, coin in enumerate(data):
+                price = float(coin.get("priceUsd") or 0)
+                mc = float(coin.get("marketCapUsd") or 0)
+                vol = float(coin.get("volumeUsd24Hr") or 0)
+                chg24 = float(coin.get("changePercent24Hr") or 0)
+                supply = float(coin.get("supply") or 0)
+                vwap = float(coin.get("vwap24Hr") or 0)
 
-                if on_progress:
-                    await on_progress(len(records), self.top_n, f"ingestion:page_{page}")
-                if page < pages:
-                    await asyncio.sleep(3)  # generous delay for free-tier
+                # Approximate high/low from vwap and change
+                high_24h = max(price, vwap * 1.02) if vwap else price
+                low_24h = min(price, vwap * 0.98) if vwap else price
 
+                records.append({
+                    "coin_id":              coin.get("id"),
+                    "symbol":               (coin.get("symbol") or "").upper(),
+                    "name":                 coin.get("name"),
+                    "current_price":        round(price, 6),
+                    "market_cap":           round(mc, 2),
+                    "market_cap_rank":      int(coin.get("rank") or 0),
+                    "total_volume":         round(vol, 2),
+                    "high_24h":             round(high_24h, 6),
+                    "low_24h":              round(low_24h, 6),
+                    "price_change_24h":     round(price * chg24 / 100, 6),
+                    "price_change_pct_1h":  None,  # not available in CoinCap
+                    "price_change_pct_24h": round(chg24, 2),
+                    "price_change_pct_7d":  None,  # not available in CoinCap
+                    "circulating_supply":   round(supply, 2),
+                    "ath":                  None,   # not available in CoinCap
+                    "ath_change_pct":       None,
+                    "last_updated":         fetched_at,
+                    "source":               "coincap",
+                    "fetched_at":           fetched_at,
+                })
+
+                if on_progress and (i + 1) % 25 == 0:
+                    await on_progress(i + 1, len(data), f"ingestion:batch_{i + 1}")
+
+        if on_progress:
+            await on_progress(len(records), self.top_n, "ingestion:done")
         return records
 
 
@@ -163,14 +154,20 @@ class WeatherIngestion:
 
         return records
 
-
 class GitHubEventsIngestion:
-    """Streams public GitHub events (pushes, PRs, issues). No auth, 60 req/hr free."""
+    """Streams public GitHub events. Uses GITHUB_TOKEN env var for higher rate limits (5000/hr vs 60/hr)."""
     BASE_URL = "https://api.github.com/events"
-    HEADERS  = {"Accept": "application/vnd.github.v3+json", "User-Agent": "DataForge-ETL/1.0"}
 
     def __init__(self, max_pages: int = 3):
         self.max_pages = max_pages
+        self.headers = {
+            "Accept": "application/vnd.github.v3+json",
+            "User-Agent": "DataForge-ETL/1.0",
+        }
+        # Use token if available — 5,000 req/hr vs 60 req/hr
+        token = os.environ.get("GITHUB_TOKEN", "")
+        if token:
+            self.headers["Authorization"] = f"token {token}"
 
     async def fetch(self, on_progress: ProgressCb = None) -> List[Dict[str, Any]]:
         records: List[Dict[str, Any]] = []
@@ -183,7 +180,7 @@ class GitHubEventsIngestion:
                 for attempt in range(3):
                     try:
                         resp = await client.get(
-                            self.BASE_URL, headers=self.HEADERS,
+                            self.BASE_URL, headers=self.headers,
                             params={"per_page": 30, "page": page},
                         )
                         if resp.status_code in (429, 403):
