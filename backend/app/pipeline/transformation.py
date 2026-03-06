@@ -278,10 +278,9 @@ def enrich(records: List[Dict]) -> List[Dict]:
 
 def detect_anomalies(records: List[Dict]) -> List[Dict]:
     """Flag statistical outliers by amount z-score."""
-    from statistics import mean as _mean, stdev as _stdev
     amounts = [r.get("amount") or 0.0 for r in records]
-    mu = _mean(amounts) if len(amounts) > 1 else 0.0
-    sigma = _stdev(amounts) if len(amounts) > 1 else 1.0
+    mu = mean(amounts) if len(amounts) > 1 else 0.0
+    sigma = stdev(amounts) if len(amounts) > 1 else 1.0
     for r in records:
         z = abs(((r.get("amount") or 0.0) - mu) / sigma) if sigma else 0.0
         r["is_anomaly"] = z > 3.5
