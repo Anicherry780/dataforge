@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DataForge — Real-Time ETL Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+
+  <!-- ─── NAV ─────────────────────────────────────────────────────────────────── -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <div class="nav-brand">
+        <span class="brand-icon">◈</span>
+        <span class="brand-name">DataForge</span>
+        <span class="brand-tag">v1.0</span>
+      </div>
+      <div class="nav-links">
+        <button class="nav-link active" data-view="dashboard">Dashboard</button>
+        <button class="nav-link" data-view="pipelines">Pipelines</button>
+        <button class="nav-link" data-view="data">Data Preview</button>
+        <button class="nav-link" data-view="runs">Run History</button>
+      </div>
+      <div class="nav-status">
+        <span class="status-dot" id="apiStatus"></span>
+        <span class="status-label" id="apiStatusLabel">Connecting…</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ─── MAIN ─────────────────────────────────────────────────────────────────── -->
+  <main class="main">
+
+    <!-- DASHBOARD VIEW -->
+    <div id="view-dashboard" class="view active">
+
+      <!-- Page header row -->
+      <div class="dash-header">
+        <div>
+          <h1 class="dash-title"><span class="gradient-text">DataForge</span> Dashboard</h1>
+          <p class="dash-sub">Real-time ETL · Quality Monitoring · Anomaly Detection</p>
+        </div>
+        <button class="btn btn-primary btn-sm" id="refreshDashboard">↻ Refresh</button>
+      </div>
+
+      <!-- KPI Cards -->
+      <div class="kpi-grid" id="kpiGrid">
+        <div class="kpi-card">
+          <div class="kpi-icon icon-blue">⬡</div>
+          <div class="kpi-body">
+            <div class="kpi-label">Records Processed</div>
+            <div class="kpi-value" id="kpiRecords">—</div>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon icon-purple">◈</div>
+          <div class="kpi-body">
+            <div class="kpi-label">Pipeline Runs</div>
+            <div class="kpi-value" id="kpiRuns">—</div>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon icon-green">✦</div>
+          <div class="kpi-body">
+            <div class="kpi-label">Success Rate</div>
+            <div class="kpi-value" id="kpiSuccess">—</div>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon icon-amber">◉</div>
+          <div class="kpi-body">
+            <div class="kpi-label">Avg Quality Score</div>
+            <div class="kpi-value" id="kpiQuality">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts Row -->
+      <div class="charts-row">
+        <div class="chart-card wide">
+          <div class="chart-header">
+            <span class="chart-title">Records Processed · Last 14 Days</span>
+            <span class="chart-badge">Daily</span>
+          </div>
+          <div class="chart-body" id="recordsChartWrap">
+            <canvas id="recordsChart"></canvas>
+            <div class="chart-empty" id="recordsEmpty">Run a pipeline to see data here.</div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <span class="chart-title">Quality by Pipeline</span>
+            <span class="chart-badge">Avg %</span>
+          </div>
+          <div class="chart-body" id="qualityChartWrap">
+            <canvas id="qualityChart"></canvas>
+            <div class="chart-empty" id="qualityEmpty">No pipeline runs yet.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Performance Chart Row -->
+      <div class="charts-row charts-row-full">
+        <div class="chart-card wide">
+          <div class="chart-header">
+            <span class="chart-title">Pipeline Performance</span>
+            <span class="chart-badge">Avg Duration</span>
+          </div>
+          <div class="chart-body" id="perfChartWrap">
+            <canvas id="perfChart"></canvas>
+            <div class="chart-empty" id="perfEmpty">Run pipelines to see performance data.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Runs (compact) -->
+      <div class="section-header">
+        <span class="section-title">Recent Runs</span>
+        <button class="btn btn-ghost btn-sm" onclick="switchView('runs')">View all →</button>
+      </div>
+      <div class="recent-runs" id="recentRuns">
+        <div class="empty-state-sm">No runs yet — go to Pipelines and trigger one.</div>
+      </div>
+
+    </div>
+
+    <!-- PIPELINES VIEW -->
+    <div id="view-pipelines" class="view">
+      <div class="page-header">
+        <div>
+          <h2 class="page-title">Pipelines</h2>
+          <p class="page-sub">Live API pipelines — CoinGecko · Open-Meteo · GitHub Events</p>
+        </div>
+        <button class="btn btn-primary" id="refreshPipelines">↻ Refresh</button>
+      </div>
+      <div class="pipeline-quick-grid" id="pipelineQuickGrid"></div>
+      <div class="pipeline-list" id="pipelineList"></div>
+    </div>
+
+    <!-- DATA PREVIEW VIEW -->
+    <div id="view-data" class="view">
+      <div class="page-header">
+        <div>
+          <h2 class="page-title">Data Preview</h2>
+          <p class="page-sub">Browse the latest processed records from the warehouse.</p>
+        </div>
+        <button class="btn btn-primary" id="refreshData">↻ Refresh</button>
+      </div>
+
+      <!-- Source tabs -->
+      <div class="data-tabs">
+        <button class="data-tab active" data-source="crypto">₿ Crypto</button>
+        <button class="data-tab" data-source="weather">⛅ Weather</button>
+        <button class="data-tab" data-source="github">⌥ GitHub</button>
+      </div>
+
+      <!-- Crypto table -->
+      <div class="table-wrap data-panel active" id="panel-crypto">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Coin</th>
+              <th>Symbol</th>
+              <th>Price (USD)</th>
+              <th>Market Cap</th>
+              <th>24h Change</th>
+              <th>Volatility</th>
+              <th>Signal</th>
+              <th>Anomaly</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-crypto">
+            <tr>
+              <td colspan="8" class="table-empty">Run the Crypto pipeline to see data.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Weather table -->
+      <div class="table-wrap data-panel" id="panel-weather">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>City</th>
+              <th>Temp (°C)</th>
+              <th>Feels Like</th>
+              <th>Humidity</th>
+              <th>Wind (km/h)</th>
+              <th>Condition</th>
+              <th>Heat Index</th>
+              <th>Extreme</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-weather">
+            <tr>
+              <td colspan="8" class="table-empty">Run the Weather pipeline to see data.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- GitHub table -->
+      <div class="table-wrap data-panel" id="panel-github">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Event Type</th>
+              <th>Actor</th>
+              <th>Repo</th>
+              <th>Action</th>
+              <th>Push Size</th>
+              <th>Trending</th>
+              <th>Anomaly</th>
+              <th>Created</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-github">
+            <tr>
+              <td colspan="8" class="table-empty">Run the GitHub pipeline to see data.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- RUN HISTORY VIEW -->
+    <div id="view-runs" class="view">
+      <div class="page-header">
+        <div>
+          <h2 class="page-title">Run History</h2>
+          <p class="page-sub">Audit trail of all pipeline executions.</p>
+        </div>
+        <button class="btn btn-primary" id="refreshRuns">↻ Refresh</button>
+      </div>
+      <div class="run-list" id="runList"></div>
+    </div>
+
+  </main>
+
+  <!-- ─── RUN PROGRESS MODAL ──────────────────────────────────────────────────── -->
+  <div class="modal-overlay" id="runModal" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title" id="modalTitle">Pipeline Running</div>
+          <div class="modal-sub" id="modalSub"></div>
+        </div>
+        <button class="modal-close" id="modalClose">✕</button>
+      </div>
+      <div class="steps-track" id="stepsTrack"></div>
+      <div class="progress-wrap">
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="progressBarFill" style="width:0%"></div>
+        </div>
+        <span class="progress-label" id="progressLabel">Initialising…</span>
+      </div>
+      <div class="quality-section" id="qualitySection" style="display:none">
+        <div class="quality-title">Data Quality Checks</div>
+        <div class="quality-grid" id="qualityGrid"></div>
+      </div>
+      <div class="agg-section" id="aggSection" style="display:none">
+        <div class="agg-title">Pipeline Aggregations</div>
+        <div class="agg-kpi-row" id="aggKpis"></div>
+        <div class="agg-charts-row" id="aggChartsRow" style="display:none">
+          <div class="agg-chart-wrap" id="aggChartWrap">
+            <canvas id="aggChart"></canvas>
+          </div>
+          <div class="agg-chart-wrap" id="aggChart2Wrap" style="display:none">
+            <canvas id="aggChart2"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="log-section">
+        <div class="log-title">
+          Live Logs
+          <button class="log-clear" onclick="document.getElementById('logOutput').textContent=''">clear</button>
+        </div>
+        <pre class="log-output" id="logOutput"></pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toastContainer"></div>
+  <script>
+    // Backend API URL. Set to your Render/Railway URL when deploying separately.
+    // Leave empty to use same origin (local Docker / nginx).
+    window.__DATAFORGE_API__ = '';
+  </script>
+  <script src="app.js"></script>
+</body>
+
+</html>

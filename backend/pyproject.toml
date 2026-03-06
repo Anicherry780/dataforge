@@ -1,0 +1,8 @@
+[project]
+name = "dataforge-backend"
+version = "0.1.0"
+description = "DataForge backend API"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
