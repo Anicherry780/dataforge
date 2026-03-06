@@ -31,7 +31,10 @@ app = FastAPI(
 )
 
 _allowed_origins = os.environ.get(
-    "ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:80"
+    "ALLOWED_ORIGINS",
+    "http://localhost:3000,http://localhost:80,http://localhost:8000,"
+    "https://etl.anirudhdev.com,http://etl.anirudhdev.com,"
+    "https://dataforge-olre.onrender.com"
 ).split(",")
 
 app.add_middleware(

@@ -607,35 +607,102 @@ function openRunModal(runId, pipelineName, dryRun) {
 
   // Open WebSocket — connect to the API backend (not location.host which may be a static CDN)
   const wsBase = API.replace(/^https/, 'wss').replace(/^http/, 'ws');
-  const ws = new WebSocket(`${wsBase}/ws/runs/${runId}`);
-  state.activeWs = ws;
+  let wsConnected = false;
 
-  ws.onopen = () => {
-    appendLog('[CONNECTED] WebSocket established');
-    const hb = setInterval(() => ws.readyState === 1 && ws.send('ping'), 15000);
-    ws._hb = hb;
-  };
+  function tryWebSocket() {
+    const ws = new WebSocket(`${wsBase}/ws/runs/${runId}`);
+    state.activeWs = ws;
 
-  ws.onmessage = (e) => handleWsEvent(JSON.parse(e.data));
+    ws.onopen = () => {
+      wsConnected = true;
+      appendLog('[CONNECTED] WebSocket established');
+      const hb = setInterval(() => ws.readyState === 1 && ws.send('ping'), 15000);
+      ws._hb = hb;
+    };
 
-  ws.onerror = () => appendLog('[ERROR] WebSocket error', 'error');
-  ws.onclose = () => {
-    clearInterval(ws._hb);
-    appendLog('[DISCONNECTED] WebSocket closed');
-  };
+    ws.onmessage = (e) => handleWsEvent(JSON.parse(e.data));
 
-  // Keep polling as fallback for logs
+    ws.onerror = () => {
+      if (!wsConnected) {
+        appendLog('[INFO] WebSocket unavailable — using polling fallback', 'info');
+      }
+    };
+    ws.onclose = () => {
+      clearInterval(ws._hb);
+      if (!wsConnected) {
+        // WebSocket never connected — rely entirely on polling
+        appendLog('[INFO] Tracking progress via polling...', 'info');
+      }
+    };
+  }
+  tryWebSocket();
+
+  // Polling fallback — drives the full UI when WebSocket is unavailable
+  let lastLogCount = 0;
   const poll = setInterval(async () => {
     if (!$('#runModal').style.display || $('#runModal').style.display === 'none') {
       clearInterval(poll);
       return;
     }
     try {
-      const r = await fetch(`${API}/api/runs/${runId}/logs`);
-      const data = await r.json();
-      if (data.status === 'success' || data.status === 'failed') clearInterval(poll);
+      const r = await fetch(`${API}/api/runs/${runId}`);
+      if (!r.ok) return;
+      const run = await r.json();
+
+      // Update steps from run data
+      const steps = run.steps || [];
+      steps.forEach(s => {
+        const stepKey = (s.step_type || s.step_name || '').toLowerCase();
+        if (stepKey) setStepState(stepKey, s.status === 'success' ? 'done' : s.status === 'failed' ? 'failed' : 'active');
+      });
+
+      // Update progress bar
+      const pct = run.status === 'success' ? 100 : run.status === 'failed' ? 100 : Math.min(90, steps.length * 23);
+      if (!wsConnected) {
+        updateProgress(pct, run.status === 'success'
+          ? `Done in ${fmtMs(run.duration_ms)} · ${fmt(run.records_loaded)} records`
+          : run.status === 'failed'
+            ? `Failed: ${run.error_message || 'Unknown error'}`
+            : `Processing... (${steps.length}/4 steps)`
+        );
+      }
+
+      // Show quality checks if available and not already shown
+      if (run.quality_checks && run.quality_checks.length && !wsConnected) {
+        renderQualityChecks(run.quality_checks, run.quality_score);
+      }
+
+      // Append new logs
+      const logs = run.logs || [];
+      if (logs.length > lastLogCount) {
+        logs.slice(lastLogCount).forEach(line => {
+          const span = document.createElement('span');
+          if (line.includes('[ERROR]')) span.className = 'log-line-error';
+          else if (line.includes('[DQ]') && line.includes('✗')) span.className = 'log-line-warn';
+          else if (line.includes('[DONE]')) span.className = 'log-line-success';
+          else if (line.includes('[STEP]') || line.includes('[DQ]')) span.className = 'log-line-info';
+          span.textContent = line + '\n';
+          $('#logOutput').appendChild(span);
+        });
+        lastLogCount = logs.length;
+      }
+
+      // Pipeline finished
+      if (run.status === 'success' || run.status === 'failed') {
+        clearInterval(poll);
+        if (run.status === 'success') {
+          $('#modalTitle').textContent = '✓ Pipeline Completed';
+          updateProgress(100, `Done in ${fmtMs(run.duration_ms)} · ${fmt(run.records_loaded)} records`);
+        } else {
+          $('#modalTitle').textContent = '✗ Pipeline Failed';
+          updateProgress(100, `Failed: ${run.error_message || 'Unknown error'}`);
+        }
+        // Refresh underlying views
+        if ($('#view-dashboard').classList.contains('active')) loadDashboard();
+        if ($('#view-runs').classList.contains('active')) loadRunHistory();
+      }
     } catch { }
-  }, 3000);
+  }, 2000);
 }
 
 let completedSteps = 0;
