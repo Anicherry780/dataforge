@@ -173,28 +173,20 @@ class GitHubEventsIngestion:
         records: List[Dict[str, Any]] = []
         fetched_at = datetime.now(timezone.utc).isoformat()
 
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=15) as client:
             for page in range(1, self.max_pages + 1):
-                # Retry with backoff on rate limit
                 resp = None
-                for attempt in range(3):
-                    try:
-                        resp = await client.get(
-                            self.BASE_URL, headers=self.headers,
-                            params={"per_page": 30, "page": page},
-                        )
-                        if resp.status_code in (429, 403):
-                            wait = 5 * (2 ** attempt)
-                            await asyncio.sleep(wait)
-                            continue
-                        resp.raise_for_status()
+                try:
+                    resp = await client.get(
+                        self.BASE_URL, headers=self.headers,
+                        params={"per_page": 30, "page": page},
+                    )
+                    if resp.status_code in (429, 403):
+                        # Rate limited — stop fetching more pages
                         break
-                    except Exception:
-                        if attempt < 2:
-                            await asyncio.sleep(5)
-                        else:
-                            resp = None
-                            break
+                    resp.raise_for_status()
+                except Exception:
+                    break
 
                 if resp is None or resp.status_code != 200:
                     break

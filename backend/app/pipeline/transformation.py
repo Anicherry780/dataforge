@@ -27,6 +27,8 @@ def _now() -> str:
 # ── Crypto transforms ──────────────────────────────────────────────────────────
 
 def _enrich_crypto(records: List[Dict]) -> Tuple[List[Dict], int]:
+    if not records:
+        return records, 0
     amounts = [r["current_price"] for r in records if (r.get("current_price") or 0) > 0]
     mu = mean(amounts) if len(amounts) > 1 else 0
     sigma = stdev(amounts) if len(amounts) > 1 else 1
@@ -68,15 +70,20 @@ def _enrich_crypto(records: List[Dict]) -> Tuple[List[Dict], int]:
 
 
 def _aggregate_crypto(records: List[Dict]) -> Dict[str, Any]:
+    if not records:
+        return {"total_coins": 0, "total_volume_usd": 0, "avg_price_usd": 0,
+                "avg_volatility": 0, "bullish_signals": 0, "bearish_signals": 0,
+                "neutral_signals": 0, "anomalies_detected": 0}
     prices = [r.get("current_price") or 0 for r in records if r.get("current_price")]
     volumes = [r.get("total_volume") or 0 for r in records]
     bullish = sum(1 for r in records if r.get("signal") == "bullish")
     bearish = sum(1 for r in records if r.get("signal") == "bearish")
+    vols = [r.get("volatility_pct", 0) for r in records]
     return {
         "total_coins":     len(records),
         "total_volume_usd": sum(volumes),
         "avg_price_usd":   round(mean(prices), 2) if prices else 0,
-        "avg_volatility":  round(mean(r.get("volatility_pct", 0) for r in records), 2),
+        "avg_volatility":  round(mean(vols), 2) if vols else 0,
         "bullish_signals": bullish,
         "bearish_signals": bearish,
         "neutral_signals": len(records) - bullish - bearish,
