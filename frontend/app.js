@@ -605,9 +605,9 @@ function openRunModal(runId, pipelineName, dryRun) {
     state.activeWs = null;
   }
 
-  // Open WebSocket
-  const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(`${wsProto}://${location.host}/ws/runs/${runId}`);
+  // Open WebSocket — connect to the API backend (not location.host which may be a static CDN)
+  const wsBase = API.replace(/^https/, 'wss').replace(/^http/, 'ws');
+  const ws = new WebSocket(`${wsBase}/ws/runs/${runId}`);
   state.activeWs = ws;
 
   ws.onopen = () => {
