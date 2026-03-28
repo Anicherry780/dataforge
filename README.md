@@ -2,7 +2,7 @@
 
 > A production-grade data engineering platform for ingesting, transforming, validating, and loading real-time data from live APIs — with a monitoring dashboard and WebSocket-powered updates.
 
-🔗 **Live Demo**: [etl.anirudhdev.com](http://etl.anirudhdev.com)
+🔗 **Live Demo**: [etl.anirudhdev.com](https://etl.anirudhdev.com)
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=flat&logo=fastapi&logoColor=white)
@@ -22,6 +22,35 @@ DataForge is a full-stack data engineering platform that demonstrates end-to-end
 - 5-dimension data quality framework (Completeness, Validity, Uniqueness, Timeliness, Consistency)
 - Real-time pipeline progress via WebSockets + polling fallback
 - Interactive analytics dashboard with Chart.js visualizations
+
+---
+
+## Screenshots
+
+### Dashboard
+Real-time KPI cards, records processed chart, quality-by-pipeline breakdown, pipeline performance, and recent runs — all in one view.
+
+![Dashboard](screenshots/dashboard.png)
+
+### Pipelines
+All three live API pipelines with run stats, success rates, quality scores, and one-click execution.
+
+![Pipelines](screenshots/pipelines.png)
+
+### Pipeline Execution
+Live WebSocket-powered pipeline run with step-by-step progress (Ingest → Quality → Transform → Load), aggregations, anomaly counts, and streaming logs.
+
+![Pipeline Execution](screenshots/pipeline-modal.png)
+
+### Data Preview
+Browse transformed records from the warehouse — crypto prices, global weather observations, and GitHub developer activity.
+
+![Data Preview](screenshots/data-preview.png)
+
+### Run History
+Full audit trail of every pipeline execution with record counts, durations, quality scores, and status.
+
+![Run History](screenshots/run-history.png)
 
 ---
 
@@ -228,4 +257,4 @@ Production extensions to discuss in interviews:
 
 ## License
 
-MIT — built by [Anirudh](https://anirudhdev.com) · Live at [etl.anirudhdev.com](http://etl.anirudhdev.com)
+MIT — built by [Anirudh](https://anirudhdev.com) · Live at [etl.anirudhdev.com](https://etl.anirudhdev.com)
