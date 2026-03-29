@@ -1,6 +1,6 @@
 # ◈ DataForge — Real-Time ETL Pipeline & Analytics Platform
 
-> A production-grade data engineering platform for ingesting, transforming, validating, and loading real-time data from live APIs — with a monitoring dashboard and WebSocket-powered updates.
+> A production-ready data engineering platform for ingesting, transforming, validating, and loading real-time data from live APIs — with a monitoring dashboard and WebSocket-powered updates.
 
 🔗 **Live Demo**: [etl.anirudhdev.com](https://etl.anirudhdev.com)
 
@@ -154,6 +154,18 @@ docker compose up --build
 
 Open **http://localhost** for the dashboard, **http://localhost:8000/api/docs** for Swagger.
 
+### Option 2 — Local Development
+
+```bash
+# Backend
+cd backend
+python -m venv venv && source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+
+# The frontend is served by FastAPI at http://localhost:8000
+```
+
 ### Option 3 — Cloud Deployment (Cloudflare Pages + Render)
 
 The live demo uses this architecture:
@@ -165,18 +177,6 @@ The live demo uses this architecture:
 window.__DATAFORGE_API__ = 'https://your-app.onrender.com';
 
 # Optional: set GITHUB_TOKEN env var on Render for higher GitHub API rate limits
-```
-
-### Option 2 — Local Development
-
-```bash
-# Backend
-cd backend
-python -m venv venv && source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
-
-# The frontend is served by FastAPI at http://localhost:8000
 ```
 
 ### Running Tests
